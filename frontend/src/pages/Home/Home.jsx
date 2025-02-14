@@ -6,12 +6,40 @@ const Home = () => {
   const [groups, setGroups] = useState([]);
   const [students, setStudents] = useState({});
   const [attendanceData, setAttendanceData] = useState({});
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]); // YYYY-MM-DD format
+  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedTraineeAttendance, setSelectedTraineeAttendance] = useState([]);
+  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
+  const [dailyAttendance, setDailyAttendance] = useState({});
 
   useEffect(() => {
     fetchTrainees();
   }, []);
+
+  useEffect(() => {
+    if (selectedGroup) {
+      fetchDailyAttendance();
+    }
+  }, [date, selectedGroup]);
+
+  const fetchDailyAttendance = async () => {
+    try {
+      const response = await fetch(`/api/attendance/daily/${date}`);
+      const data = await response.json();
+      
+      // Convert array to object with traineeID as key for easier lookup
+      const attendanceMap = data.reduce((acc, record) => {
+        acc[record.traineeID] = record.status;
+        return acc;
+      }, {});
+      
+      setDailyAttendance(attendanceMap);
+      // Clear any pending attendance changes
+      setAttendanceData({});
+    } catch (error) {
+      console.error("Error fetching daily attendance:", error);
+    }
+  };
 
   const fetchTrainees = async () => {
     try {
@@ -52,11 +80,22 @@ const Home = () => {
     setSelectedGroup(null);
   };
 
+  const handleDateChange = (newDate) => {
+    setDate(newDate);
+  };
+
   const handleAttendance = (groupName, studentId, status) => {
-    setAttendanceData((prev) => ({
-      ...prev,
-      [`${groupName}-${studentId}`]: { traineeID: studentId, status, date },
-    }));
+    // Only allow changing attendance if no status exists for this date
+    if (!dailyAttendance[studentId]) {
+      setAttendanceData((prev) => ({
+        ...prev,
+        [`${groupName}-${studentId}`]: {
+          traineeID: studentId,
+          status,
+          date,
+        },
+      }));
+    }
   };
 
   const handleSubmit = async () => {
@@ -67,7 +106,7 @@ const Home = () => {
         return;
       }
 
-      const response = await fetch("/api/attendance/mark-bulk", {
+      const response = await fetch("/api/attendance/mark", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(attendanceList),
@@ -76,10 +115,32 @@ const Home = () => {
       if (!response.ok) throw new Error("Failed to submit attendance");
 
       alert("Attendance submitted successfully");
-      setAttendanceData({});
+      // Refresh the daily attendance after submission
+      fetchDailyAttendance();
     } catch (error) {
       console.error("Error submitting attendance:", error);
     }
+  };
+
+  const fetchTraineeAttendance = async (traineeID) => {
+    try {
+      const response = await fetch(`/api/attendance/trainee/${traineeID}`);
+      const data = await response.json();
+      setSelectedTraineeAttendance(data);
+      setIsAttendanceModalOpen(true);
+    } catch (error) {
+      console.error("Error fetching trainee attendance:", error);
+    }
+  };
+
+  const getAttendanceStatus = (studentId) => {
+    // Check if there's a pending change
+    const pendingKey = `${selectedGroup}-${studentId}`;
+    if (attendanceData[pendingKey]) {
+      return attendanceData[pendingKey].status;
+    }
+    // Otherwise return the saved status for this date
+    return dailyAttendance[studentId];
   };
 
   const groupStudents = students[selectedGroup] || [];
@@ -124,7 +185,7 @@ const Home = () => {
               <input
                 type="date"
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => handleDateChange(e.target.value)}
                 className="border rounded px-2 py-1"
               />
             </div>
@@ -160,51 +221,103 @@ const Home = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredStudents.map((student) => (
-                  <tr key={student.id}>
-                    <td className="px-6 py-4 whitespace-nowrap">{student.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">{student.id}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <div className="flex justify-center space-x-4">
+                {filteredStudents.map((student) => {
+                  const status = getAttendanceStatus(student.id);
+                  const isMarked = status !== undefined;
+                  
+                  return (
+                    <tr key={student.id}>
+                      <td className="px-6 py-4 whitespace-nowrap">{student.name}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">{student.id}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-center">
+                        {isMarked ? (
+                          <div className="flex justify-center items-center">
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full ${
+                              status === "Present" 
+                                ? "bg-green-100 text-green-800" 
+                                : "bg-red-100 text-red-800"
+                            }`}>
+                              {status}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex justify-center space-x-4">
+                            <button
+                              onClick={() => handleAttendance(selectedGroup, student.id, "Present")}
+                              className="p-2 rounded-full hover:bg-green-100 text-gray-400"
+                            >
+                              <CheckCircle size={24} />
+                            </button>
+                            <button
+                              onClick={() => handleAttendance(selectedGroup, student.id, "Absent")}
+                              className="p-2 rounded-full hover:bg-red-100 text-gray-400"
+                            >
+                              <XCircle size={24} />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-center">
                         <button
-                          onClick={() => handleAttendance(selectedGroup, student.id, "Present")}
-                          className={`p-2 rounded-full ${
-                            attendanceData[`${selectedGroup}-${student.id}`]?.status === "Present"
-                              ? "bg-green-100 text-green-600"
-                              : "hover:bg-green-100 text-gray-400"
-                          }`}
+                          onClick={() => fetchTraineeAttendance(student.id)}
+                          className="text-blue-600 hover:text-blue-800"
                         >
-                          <CheckCircle size={24} />
+                          <Eye size={24} />
                         </button>
-                        <button
-                          onClick={() => handleAttendance(selectedGroup, student.id, "Absent")}
-                          className={`p-2 rounded-full ${
-                            attendanceData[`${selectedGroup}-${student.id}`]?.status === "Absent"
-                              ? "bg-red-100 text-red-600"
-                              : "hover:bg-red-100 text-gray-400"
-                          }`}
-                        >
-                          <XCircle size={24} />
-                        </button>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <button className="text-blue-600 hover:text-blue-800">
-                        <Eye size={24} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
-          <button
-            onClick={handleSubmit}
-            className="mt-6 bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700"
-          >
-            Submit Attendance
-          </button>
+          {!Object.keys(dailyAttendance).length && (
+            <button
+              onClick={handleSubmit}
+              className="mt-6 bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700"
+            >
+              Submit Attendance
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Custom Modal using Tailwind CSS */}
+      {isAttendanceModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-full max-w-md p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Attendance Records</h2>
+              <button
+                onClick={() => setIsAttendanceModalOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <XCircle size={24} />
+              </button>
+            </div>
+            
+            {selectedTraineeAttendance.length > 0 ? (
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {selectedTraineeAttendance.map((record) => (
+                    <tr key={record._id}>
+                      <td className="px-4 py-2">{new Date(record.date).toLocaleDateString()}</td>
+                      <td className="px-4 py-2">{record.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="text-gray-500">No attendance records found.</p>
+            )}
+          </div>
         </div>
       )}
     </div>
