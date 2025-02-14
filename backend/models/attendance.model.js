@@ -2,9 +2,9 @@ import mongoose from "mongoose";
 
 const attendanceSchema = new mongoose.Schema({
     traineeID: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Trainee",
+        type: String,
         required: true,
+        ref: "Trainee",
     },
     date: {
         type: Date,

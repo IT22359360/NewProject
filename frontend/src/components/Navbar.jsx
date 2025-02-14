@@ -19,7 +19,7 @@ const Navbar = () => {
     { id: 'home', title: 'Home', icon: <Home size={20} />, path: '/home' },
     { id: 'create-group', title: 'Create Group', icon: <Info size={20} />, path: '/create-group' },
     { id: 'contact', title: 'Contact', icon: <Contact size={20} />, path: '/contact' },
-    { id: 'settings', title: 'Settings', icon: <Settings size={20} />, path: '/settings' },
+    { id: 'settings', title: 'Report', icon: <Settings size={20} />, path: '/report' },
     { id: 'profile', title: 'Profile', icon: <User size={20} />, path: '/profile' },
   ];
 
