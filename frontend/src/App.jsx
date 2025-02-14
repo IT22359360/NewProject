@@ -2,6 +2,8 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Home from './pages/Home/Home.jsx';
 import Navbar from './components/Navbar';
+import CreateGroup from './pages/CreateGroup';  
+
 
 const App = () => {
   return (
@@ -12,6 +14,7 @@ const App = () => {
           <Routes>
             <Route path="/home" element={<Home />} />
             <Route path="/" element={<Home />} />
+            <Route path="/create-group" element={<CreateGroup />} />
             {/* Add more routes here */}
           </Routes>
         </div>
