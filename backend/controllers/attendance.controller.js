@@ -91,3 +91,22 @@ export const getAllAttendance = async (req, res) => {
       res.status(500).json({ error: error.message });
     }
   };
+
+  export const updateAttendance = async (req, res) => {
+    try {
+        const { status } = req.body;
+        const updatedRecord = await Attendance.findByIdAndUpdate(
+          req.params.id,
+          { status },
+          { new: true }
+        );
+    
+        if (!updatedRecord) {
+          return res.status(404).json({ message: "Record not found" });
+        }
+    
+        res.status(200).json(updatedRecord);
+      } catch (error) {
+        res.status(500).json({ message: error.message });
+      }
+    };

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Users, CheckCircle, XCircle, ArrowLeft, Calendar, Search, Eye } from "lucide-react";
+import { Users, CheckCircle, XCircle, ArrowLeft, Calendar, Search, Eye, Edit } from "lucide-react";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 const Home = () => {
   const [selectedGroup, setSelectedGroup] = useState(null);
@@ -10,6 +12,8 @@ const Home = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTraineeAttendance, setSelectedTraineeAttendance] = useState([]);
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState(null);
   const [dailyAttendance, setDailyAttendance] = useState({});
 
   useEffect(() => {
@@ -26,18 +30,17 @@ const Home = () => {
     try {
       const response = await fetch(`/api/attendance/daily/${date}`);
       const data = await response.json();
-      
-      // Convert array to object with traineeID as key for easier lookup
+
       const attendanceMap = data.reduce((acc, record) => {
         acc[record.traineeID] = record.status;
         return acc;
       }, {});
-      
+
       setDailyAttendance(attendanceMap);
-      // Clear any pending attendance changes
       setAttendanceData({});
     } catch (error) {
       console.error("Error fetching daily attendance:", error);
+      toast.error("Error fetching daily attendance: " + error.message);
     }
   };
 
@@ -68,6 +71,7 @@ const Home = () => {
       setStudents(groupedTrainees);
     } catch (error) {
       console.error("Error fetching trainees:", error);
+      toast.error("Error fetching trainees: " + error.message);
     }
   };
 
@@ -85,7 +89,6 @@ const Home = () => {
   };
 
   const handleAttendance = (groupName, studentId, status) => {
-    // Only allow changing attendance if no status exists for this date
     if (!dailyAttendance[studentId]) {
       setAttendanceData((prev) => ({
         ...prev,
@@ -102,7 +105,7 @@ const Home = () => {
     try {
       const attendanceList = Object.values(attendanceData);
       if (attendanceList.length === 0) {
-        alert("No attendance changes to submit.");
+        toast.warning("No attendance changes to submit.");
         return;
       }
 
@@ -114,11 +117,11 @@ const Home = () => {
 
       if (!response.ok) throw new Error("Failed to submit attendance");
 
-      alert("Attendance submitted successfully");
-      // Refresh the daily attendance after submission
+      toast.success("Attendance submitted successfully");
       fetchDailyAttendance();
     } catch (error) {
       console.error("Error submitting attendance:", error);
+      toast.error("Error submitting attendance: " + error.message);
     }
   };
 
@@ -130,16 +133,39 @@ const Home = () => {
       setIsAttendanceModalOpen(true);
     } catch (error) {
       console.error("Error fetching trainee attendance:", error);
+      toast.error("Error fetching trainee attendance: " + error.message);
+    }
+  };
+
+  const handleEditAttendance = (record) => {
+    setSelectedRecord(record);
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdateAttendance = async (status) => {
+    try {
+      const response = await fetch(`/api/attendance/update/${selectedRecord._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update attendance");
+
+      toast.success("Attendance updated successfully");
+      setIsEditModalOpen(false);
+      fetchTraineeAttendance(selectedRecord.traineeID);
+    } catch (error) {
+      console.error("Error updating attendance:", error);
+      toast.error("Error updating attendance: " + error.message);
     }
   };
 
   const getAttendanceStatus = (studentId) => {
-    // Check if there's a pending change
     const pendingKey = `${selectedGroup}-${studentId}`;
     if (attendanceData[pendingKey]) {
       return attendanceData[pendingKey].status;
     }
-    // Otherwise return the saved status for this date
     return dailyAttendance[studentId];
   };
 
@@ -150,6 +176,18 @@ const Home = () => {
 
   return (
     <div className="p-8">
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+      />
+
       {!selectedGroup ? (
         <div>
           <h1 className="text-3xl font-bold mb-8">Course Groups</h1>
@@ -224,7 +262,7 @@ const Home = () => {
                 {filteredStudents.map((student) => {
                   const status = getAttendanceStatus(student.id);
                   const isMarked = status !== undefined;
-                  
+
                   return (
                     <tr key={student.id}>
                       <td className="px-6 py-4 whitespace-nowrap">{student.name}</td>
@@ -232,11 +270,13 @@ const Home = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-center">
                         {isMarked ? (
                           <div className="flex justify-center items-center">
-                            <span className={`inline-flex items-center px-3 py-1 rounded-full ${
-                              status === "Present" 
-                                ? "bg-green-100 text-green-800" 
-                                : "bg-red-100 text-red-800"
-                            }`}>
+                            <span
+                              className={`inline-flex items-center px-3 py-1 rounded-full ${
+                                status === "Present"
+                                  ? "bg-green-100 text-green-800"
+                                  : "bg-red-100 text-red-800"
+                              }`}
+                            >
                               {status}
                             </span>
                           </div>
@@ -272,18 +312,16 @@ const Home = () => {
             </table>
           </div>
 
-          {!Object.keys(dailyAttendance).length && (
             <button
               onClick={handleSubmit}
               className="mt-6 bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700"
             >
               Submit Attendance
             </button>
-          )}
+          
         </div>
       )}
 
-      {/* Custom Modal using Tailwind CSS */}
       {isAttendanceModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg w-full max-w-md p-6">
@@ -296,13 +334,20 @@ const Home = () => {
                 <XCircle size={24} />
               </button>
             </div>
-            
+
             {selectedTraineeAttendance.length > 0 ? (
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                      Date
+                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                      Status
+                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                      Action
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -310,6 +355,14 @@ const Home = () => {
                     <tr key={record._id}>
                       <td className="px-4 py-2">{new Date(record.date).toLocaleDateString()}</td>
                       <td className="px-4 py-2">{record.status}</td>
+                      <td className="px-4 py-2">
+                        <button
+                          onClick={() => handleEditAttendance(record)}
+                          className="text-blue-600 hover:text-blue-800"
+                        >
+                          <Edit size={20} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -317,6 +370,37 @@ const Home = () => {
             ) : (
               <p className="text-gray-500">No attendance records found.</p>
             )}
+          </div>
+        </div>
+      )}
+
+      {isEditModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-full max-w-md p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Edit Attendance</h2>
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <XCircle size={24} />
+              </button>
+            </div>
+
+            <div className="flex space-x-4">
+              <button
+                onClick={() => handleUpdateAttendance("Present")}
+                className="bg-green-500 text-white px-4 py-2 rounded"
+              >
+                Present
+              </button>
+              <button
+                onClick={() => handleUpdateAttendance("Absent")}
+                className="bg-red-500 text-white px-4 py-2 rounded"
+              >
+                Absent
+              </button>
+            </div>
           </div>
         </div>
       )}
